@@ -1,6 +1,6 @@
-streamlit 
-pandas 
-seaborn 
+streamlit
+pandas
+seaborn
 plotly
-numpy 
-sklearn
+numpy
+scikit-learn
