@@ -7,6 +7,7 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.model_selection import train_test_split
 from sklearn.metrics import mean_squared_error, r2_score, mean_absolute_error
 from sklearn.linear_model import LinearRegression
+from sklearn.feature_selection import RFE
 
 # Configure app layout
 st.set_page_config(
@@ -23,7 +24,44 @@ def load_data():
 data = load_data()
 
 # Sidebar navigation with icons
-st.sidebar.title("🧭 Navigation Hub")
+st.sidebar.markdown("""
+    <style>
+    .sidebar-nav {
+        font-size: 2em;
+        font-weight: 900;
+        padding: 15px;
+        margin: 7px 0;
+        border-radius: 5px;
+        transition: all 0.3s ease;
+    }
+    .sidebar-nav:hover {
+        background-color: red;
+        transform: translateX(7px);
+    }
+    .sidebar-title {
+        font-size: 2.0em;
+        font-weight: 900;
+        color: #1E88E5;
+        margin-bottom: 20px;
+        text-align: center;
+    }
+    /* Custom styling for radio buttons */
+    div[role="radiogroup"] label {
+        font-size: 2em !important;
+        font-weight: 900 !important;
+        padding: 10px !important;
+        margin: 7px 0 !important;
+        border-radius: 5px !important;
+        transition: all 0.3s ease !important;
+    }
+    div[role="radiogroup"] label:hover {
+        background-color: #ff6b6b !important;
+        color: white !important;
+        transform: translateX(7px) !important;
+    }
+    </style>
+    <div class="sidebar-title">🧭 Navigation Hub</div>
+""", unsafe_allow_html=True)
 
 # Define pages with their icons
 pages = {
@@ -877,185 +915,207 @@ elif page == "Economy vs Life Expectancy":
     st.write(insights)
 # Page: Life Expectancy Prediction Model
 elif page == "Life Expectancy Predicted Model":
-    
-    st.title("🔮 Enhanced Life Expectancy Prediction Model")
+    st.title("🔮 ENHANCED LIFE EXPECTANCY PREDICTION MODEL")
     
     try:
         # Show correlation with Life Expectancy
-        st.header("📊 Feature Correlations Analysis")
+        st.header("📊 FEATURE SELECTION ANALYSIS")
         
-        # Select numerical columns and ensure they exist in the dataset
-        numerical_cols = [col for col in ['Life_expectancy', 'Adult_mortality', 
-                                        'Alcohol_consumption', 'BMI', 
-                                        'GDP_per_capita', 'Schooling'] 
-                         if col in data.columns]
+        # Load and prepare data
+        df = data.copy()
+        df = df.dropna()
         
-        # Check if we have enough features
-        if len(numerical_cols) < 2:
-            st.error("Not enough numerical features available in the dataset")
-            st.stop()
-            
-        correlation_matrix = data[numerical_cols].corr()
+        # Select only numerical columns for feature selection
+        numerical_cols = df.select_dtypes(include=['float64', 'int64']).columns
+        numerical_cols = [col for col in numerical_cols if col != 'Life_expectancy']
         
-        # Plot correlation heatmap
-        fig_corr = px.imshow(
-            correlation_matrix,
-            title='Feature Correlation Heatmap',
-            color_continuous_scale='RdBu',
-            aspect='auto',
-            labels=dict(color="Correlation")
-        )
-        fig_corr.update_layout(
-            xaxis_title="Features",
-            yaxis_title="Features"
-        )
-        plot_figure(fig_corr)
+        # Prepare data for feature selection
+        X = df[numerical_cols]
+        y = df['Life_expectancy']
         
-        # Select features and verify they exist in the dataset
-        selected_features = ['Adult_mortality', 'Schooling', 'GDP_per_capita', 'BMI']
-        if not all(feature in data.columns for feature in selected_features):
-            st.error("Some required features are missing from the dataset")
-            st.stop()
+        # Train-test split
+        X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
         
-        st.write("""
-        Based on correlation analysis, we selected the following key features for prediction:
-        - Adult Mortality Rate (Strong negative correlation)
-        - Years of Schooling (Strong positive correlation)
-        - GDP per Capita (Strong positive correlation)
-        - BMI (Body Mass Index) (Moderate positive correlation)
-        """)
-        
-        # Prepare data
-        X = data[selected_features].copy()  # Use copy to avoid SettingWithCopyWarning
-        y = data['Life_expectancy'].copy()
-        
-        # Check for and handle missing values
-        if X.isnull().any().any() or y.isnull().any():
-            st.warning("Handling missing values in the dataset...")
-            X = X.fillna(X.mean())
-            y = y.fillna(y.mean())
-        
-        # Split data
-        X_train, X_test, y_train, y_test = train_test_split(
-            X, y, test_size=0.2, random_state=42
-        )
-        
-        # Initialize and fit scaler
+        # Standardize features
         scaler = StandardScaler()
         X_train_scaled = scaler.fit_transform(X_train)
         X_test_scaled = scaler.transform(X_test)
         
-        # Train model
+        # Feature selection using RFE
         model = LinearRegression()
-        model.fit(X_train_scaled, y_train)
+        rfe = RFE(estimator=model, n_features_to_select=4)
+        X_train_selected = rfe.fit_transform(X_train_scaled, y_train)
+        X_test_selected = rfe.transform(X_test_scaled)
         
-        # Make predictions
-        y_pred = model.predict(X_test_scaled)
-        
-        # Calculate metrics
-        mse = mean_squared_error(y_test, y_pred)
-        rmse = np.sqrt(mse)
-        r2 = r2_score(y_test, y_pred)
-        mae = mean_absolute_error(y_test, y_pred)
-        
-        # Display metrics
-        st.header("📈 Model Performance Metrics")
-        col1, col2, col3, col4 = st.columns(4)
-        
-        with col1:
-            st.metric("R² Score", f"{r2:.3f}")
-        with col2:
-            st.metric("RMSE", f"{rmse:.2f} years")
-        with col3:
-            st.metric("MAE", f"{mae:.2f} years")
-        with col4:
-            st.metric("Training Size", f"{len(X_train)} samples")
+        # Get selected feature names
+        selected_features = X.columns[rfe.support_].tolist()
         
         st.write("""
-        **Interpretation of Metrics:**
-        - R² Score: Indicates how well the model fits the data (1.0 is perfect fit)
-        - RMSE: Average prediction error in years
-        - MAE: Average absolute prediction error in years
+        BASED ON RECURSIVE FEATURE ELIMINATION (RFE), WE SELECTED THE FOLLOWING KEY FEATURES FOR PREDICTION:
+        """)
+        
+        for feature in selected_features:
+            st.write(f"- {feature.upper()}")
+            
+        # Create correlation matrix for selected features
+        st.header("📈 CORRELATION ANALYSIS")
+        selected_df = df[selected_features + ['Life_expectancy']]
+        
+        # Plot correlation matrix
+        fig_corr = px.imshow(
+            selected_df.corr(),
+            title="CORRELATION MATRIX: SELECTED FEATURES VS LIFE EXPECTANCY",
+            color_continuous_scale='RdBu',
+            aspect='auto',
+            labels=dict(color="CORRELATION")
+        )
+        fig_corr.update_layout(
+            xaxis_title="FEATURES",
+            yaxis_title="FEATURES"
+        )
+        plot_figure(fig_corr)
+        
+        # Plot regression plots for each selected feature
+        st.header("📊 FEATURE RELATIONSHIPS")
+        for feature in selected_features:
+            fig_reg = px.scatter(
+                df,
+                x=feature,
+                y='Life_expectancy',
+                trendline="ols",
+                title=f"LIFE EXPECTANCY VS {feature.upper()}",
+                color='Life_expectancy',
+                color_continuous_scale='RdBu'
+            )
+            fig_reg.update_traces(
+                line=dict(color='#1E88E5', width=2)
+            )
+            plot_figure(fig_reg)
+        
+        # Train model on selected features
+        model.fit(X_train_selected, y_train)
+        y_pred = model.predict(X_test_selected)
+        
+        # Calculate metrics
+        r2 = r2_score(y_test, y_pred)
+        n = X_test_selected.shape[0]
+        p = X_test_selected.shape[1]
+        adj_r2 = 1 - (1 - r2) * (n - 1) / (n - p - 1)
+        
+        # Display metrics
+        st.header("📈 MODEL PERFORMANCE METRICS")
+        col1, col2, col3 = st.columns(3)
+        
+        with col1:
+            st.metric("R² SCORE", f"{r2:.4f}")
+        with col2:
+            st.metric("ADJUSTED R² SCORE", f"{adj_r2:.4f}")
+        with col3:
+            st.metric("TRAINING SIZE", f"{len(X_train)} SAMPLES")
+        
+        st.write("""
+        **INTERPRETATION OF METRICS:**
+        - R² SCORE: INDICATES HOW WELL THE MODEL FITS THE DATA (1.0 IS PERFECT FIT)
+        - ADJUSTED R² SCORE: MODIFIED VERSION OF R² THAT PENALIZES FOR ADDITIONAL FEATURES
         """)
         
         # Input form
-        st.header("🎯 Predict Life Expectancy")
-        st.write("Enter values for the features below to get a life expectancy prediction")
+        st.header("🎯 PREDICT LIFE EXPECTANCY")
+        st.write("ENTER VALUES FOR THE SELECTED FEATURES BELOW TO GET A LIFE EXPECTANCY PREDICTION")
         
-        # Get min and max values from the dataset for better input validation
+        # Default values for Pakistan's health statistics
+        default_values = {
+            'Infant_deaths': 50.1,
+            'Under_five_deaths': 58.5,
+            'Adult_mortality': 129.9,
+            'Alcohol_consumption': 0.08
+        }
+        
+        # Create input fields for selected features
+        input_data = {}
         col1, col2 = st.columns(2)
         
         with col1:
-            adult_mortality = st.number_input(
-                "Adult Mortality Rate (per 1000)", 
-                min_value=float(X['Adult_mortality'].min()),
-                max_value=float(X['Adult_mortality'].max()),
-                value=float(X['Adult_mortality'].median())
-            )
-            schooling = st.number_input(
-                "Years of Schooling",
-                min_value=float(X['Schooling'].min()),
-                max_value=float(X['Schooling'].max()),
-                value=float(X['Schooling'].median())
-            )
+            for i, feature in enumerate(selected_features[:len(selected_features)//2]):
+                min_val = float(df[feature].min())
+                max_val = float(df[feature].max())
+                # Use default value if available, otherwise use median
+                default_val = default_values.get(feature, float(df[feature].median()))
+                input_data[feature] = st.number_input(
+                    f"{feature.upper()}",
+                    min_value=min_val,
+                    max_value=max_val,
+                    value=default_val,
+                    help=f"DEFAULT VALUE FOR PAKISTAN: {default_val}" if feature in default_values else None
+                )
         
         with col2:
-            gdp = st.number_input(
-                "GDP per Capita ($)",
-                min_value=float(X['GDP_per_capita'].min()),
-                max_value=float(X['GDP_per_capita'].max()),
-                value=float(X['GDP_per_capita'].median())
-            )
-            bmi = st.number_input(
-                "Average BMI",
-                min_value=float(X['BMI'].min()),
-                max_value=float(X['BMI'].max()),
-                value=float(X['BMI'].median())
-            )
+            for i, feature in enumerate(selected_features[len(selected_features)//2:]):
+                min_val = float(df[feature].min())
+                max_val = float(df[feature].max())
+                # Use default value if available, otherwise use median
+                default_val = default_values.get(feature, float(df[feature].median()))
+                input_data[feature] = st.number_input(
+                    f"{feature.upper()}",
+                    min_value=min_val,
+                    max_value=max_val,
+                    value=default_val,
+                    help=f"DEFAULT VALUE FOR PAKISTAN: {default_val}" if feature in default_values else None
+                )
         
-        if st.button("Predict Life Expectancy"):
+        # Add a note about the default values
+        st.info("""
+        ℹ️ DEFAULT VALUES SHOWN ARE BASED ON PAKISTAN'S 2023 HEALTH STATISTICS:
+        - INFANT MORTALITY RATE: 50.1 DEATHS PER 1,000 LIVE BIRTHS
+        - UNDER-FIVE MORTALITY RATE: 58.5 DEATHS PER 1,000 LIVE BIRTHS
+        - ADULT MORTALITY RATE: 129.9 DEATHS PER 1,000 ADULTS
+        - ALCOHOL CONSUMPTION: 0.08 LITERS PER PERSON ANNUALLY
+        """)
+        
+        if st.button("PREDICT LIFE EXPECTANCY"):
             try:
-                # Prepare input data
-                input_data = np.array([[adult_mortality, schooling, gdp, bmi]])
-                input_scaled = scaler.transform(input_data)
+                # Create a DataFrame with all original features
+                full_input_df = pd.DataFrame(columns=X.columns)
+                
+                # Fill in the values for selected features
+                for feature in selected_features:
+                    full_input_df[feature] = [input_data[feature]]
+                
+                # Fill remaining features with 0
+                full_input_df = full_input_df.fillna(0)
+                
+                # Ensure columns are in the same order as training data
+                full_input_df = full_input_df[X.columns]
+                
+                # Transform input data
+                input_scaled = scaler.transform(full_input_df)
+                input_selected = rfe.transform(input_scaled)
                 
                 # Make prediction
-                prediction = model.predict(input_scaled)[0]
+                prediction = model.predict(input_selected)[0]
                 
                 # Validate prediction
                 if prediction < 0 or prediction > 100:
-                    st.error("Invalid prediction value. Please check input values.")
+                    st.error("INVALID PREDICTION VALUE. PLEASE CHECK INPUT VALUES.")
                 else:
-                    st.success(f"Predicted Life Expectancy: {prediction:.1f} years")
+                    st.success(f"PREDICTED LIFE EXPECTANCY: {prediction:.1f} YEARS")
                 
                 st.write("""
-                **Note**: This is a simplified prediction model based on historical data. 
-                Actual life expectancy depends on many more factors including:
-                - Healthcare quality and accessibility
-                - Environmental conditions
-                - Lifestyle choices
-                - Genetic factors
+                **NOTE**: THIS IS AN ENHANCED PREDICTION MODEL BASED ON RECURSIVE FEATURE ELIMINATION (RFE). 
+                ACTUAL LIFE EXPECTANCY DEPENDS ON MANY MORE FACTORS INCLUDING:
+                - HEALTHCARE QUALITY AND ACCESSIBILITY
+                - ENVIRONMENTAL CONDITIONS
+                - LIFESTYLE CHOICES
+                - GENETIC FACTORS
                 """)
                 
-                # Show feature importance
-                st.header("📊 Feature Importance")
-                importance_df = pd.DataFrame({
-                    'Feature': selected_features,
-                    'Importance': np.abs(model.coef_)
-                })
-                importance_df = importance_df.sort_values('Importance', ascending=False)
-                
-                fig_importance = px.bar(
-                    importance_df,
-                    x='Feature',
-                    y='Importance',
-                    title='Feature Importance in Prediction'
-                )
-                plot_figure(fig_importance)
-                
             except Exception as e:
-                st.error(f"Error making prediction: {str(e)}")
+                st.error(f"ERROR MAKING PREDICTION: {str(e)}")
+                st.write("DEBUG INFORMATION:")
+                st.write(f"SELECTED FEATURES: {selected_features}")
+                st.write(f"INPUT DATA KEYS: {list(input_data.keys())}")
+                st.write(f"ORIGINAL COLUMNS: {list(X.columns)}")
                 
     except Exception as e:
-        st.error(f"An error occurred: {str(e)}")
-        st.write("Please check your data and try again.")
+        st.error(f"AN ERROR OCCURRED: {str(e)}")
+        st.write("PLEASE CHECK YOUR DATA AND TRY AGAIN.")
