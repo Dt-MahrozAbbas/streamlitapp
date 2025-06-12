@@ -128,25 +128,6 @@ if page == "Overview":
         countries_count = len(data['Country'].unique())
         st.metric("Countries Analyzed", countries_count)
 
-    # Relationships Analysis
-    st.header("Key Variables Relationship Analysis")
-    st.write("Exploring relationships between key health and socioeconomic indicators:")
-    
-    # Select relevant numerical columns for the pairplot
-    pairplot_vars = ['Life_expectancy', 'GDP_per_capita', 'Schooling', 
-                     'Adult_mortality', 'BMI', 'Alcohol_consumption']
-    
-    with st.spinner("Generating visualization... This may take a moment."):
-        fig = px.scatter_matrix(
-            data,
-            dimensions=pairplot_vars,
-            title="Relationships between Key Variables",
-            color='Economy_status',
-            opacity=0.7
-        )
-        fig.update_layout(height=800, width=800)
-        fig.update_traces(diagonal_visible=False)
-        plot_figure(fig)
 
 # Page: Life Expectancy by Region
 elif page == "Life Expectancy by Region":
